@@ -52,36 +52,22 @@ class TwitchBot(irc.IRCClient, object):
         for command in self.commands:
             command.close(self)
 
-    def quit(self):
+    def terminate(self):
         self.close_commands()
         reactor.stop()
 
-class DiceBot(object):
-    def __init__(self):
-        self.nickname = 'DiceBot' #TODO: register a new Twitch account for this
-        self.password = os.environ['TWITCH_OAUTH']
-        self.channel = os.environ['TWITCH_USER']
-        self.irc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.irc.connect((TWITCH_HOST, TWITCH_PORT))
-        self.irc.settimeout(3)
-
-        self.__write_to_system('PASS %s' % self.password)
-        self.__write_to_system('NICK %s' % self.nickname)
-        self.__write_to_system('JOIN #%s' % self.channel)
-    
-    def __write_to_system(self, message):
-        self.irc.send(message + "\r\n")
-    
-    def write_to_chat(self, message):
-        self.__write_to_system('PRIVMSG #%s :%s' % (self.channel, message))
-    
-    def quit(self):
-        self.write_to_chat('Bye!')
-        self.__write_to_system('PART #%s' % self.channel)
-        self.__write_to_system('QUIT')
-
-dicebot = DiceBot()
-# atexit.register(dicebot.quit)
-print(dicebot.irc.recv(2048))
-# dicebot.write_to_chat("hello world")
-
+class DiceBot(TwitchBot):
+    def __init__(self,
+                 channel,
+                 password,
+                 nickname=os.environ['TWITCH_USER']+'_dicebot',
+                 admins=[],
+                 ignores=['nightbot'],
+                 command_classes=[]):
+        dice_command_classes = [] # TODO: dice command classes
+        super().__init__(channel,
+                         password,
+                         nickname=nickname,
+                         admins=admins,
+                         ignores=ignores,
+                         command_classes=list(set(command_classes + dice_command_classes)))
