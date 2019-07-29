@@ -1,6 +1,7 @@
 from twisted.internet import protocol, reactor
 from collections import defaultdict
 from importlib import reload
+from bot import DiceBot
 from enum import Enum
 
 import typing
@@ -13,8 +14,9 @@ TWITCH_PORT = 6667
 class BotFactory(protocol.ClientFactory):
     MAX_WAIT_TIME = 512
 
-    def __init__(self):
-        self.protocol = bot.BotProtocol
+    def __init__(self, bot_class):
+        self.protocol = bot.CustomBotProtocol
+        self.bot_class = bot_class
         self.connection = None
 
         self.tags = defaultdict(dict)
@@ -24,7 +26,7 @@ class BotFactory(protocol.ClientFactory):
     def clientConnectionLost(self, connector, reason):
         # TODO: log reason
         print('REASON:\n', reason)
-        self.protocol = reload(bot).BotProtocol
+        self.protocol = reload(bot).CustomBotProtocol
         connector.connect()
     
     def clientConnectionFailed(self, connector, reason):
@@ -35,9 +37,9 @@ class BotFactory(protocol.ClientFactory):
         connector.connect()
     
     def buildProtocol(self, addr):
-        self.connection = self.protocol(factory=self)
+        self.connection = self.protocol(self.bot_class, factory=self)
         return self.connection
 
 if __name__ == "__main__":
-    reactor.connectTCP(TWITCH_HOST, TWITCH_PORT, BotFactory())
+    reactor.connectTCP(TWITCH_HOST, TWITCH_PORT, BotFactory(DiceBot))
     reactor.run()
