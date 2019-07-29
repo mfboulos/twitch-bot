@@ -1,6 +1,8 @@
 from bot_config import TwitchBotConfig, DiceBotConfig
 from twisted.words.protocols.irc import IRCClient
 from twisted.internet import reactor
+from commands import Command, RollCommand
+from typing import List
 
 import requests
 import typing
@@ -59,14 +61,11 @@ class CustomBotProtocol(IRCClient, object):
 
 class TwitchBot(object):
     def __init__(self,
-                 config: TwitchBotConfig,
-                 protocol: CustomBotProtocol):
+                 config: TwitchBotConfig=TwitchBotConfig()):
         self.channel = config.channel
         self.password = config.password
         self.nickname = config.nickname
         self.ignore_patterns = config.ignore_patterns
-        
-        self.protocol = protocol
 
         user_data = requests.get(USERLIST_API % self.channel[1:]).json()
         chatters = user_data['chatters']
@@ -74,11 +73,37 @@ class TwitchBot(object):
         self.mods = set(chatters['moderators'])
         self.subs = set()
 
+
+class CustomTwitchBot(TwitchBot):
+    def __init__(self,
+                 config,
+                 protocol: CustomBotProtocol,
+                 commands: List[Command]=[]):
+        super().__init__(config=config)
+        self.protocol = protocol
+        self.commands = commands
+
     def write(self, message):
         self.protocol.say(self.channel, message)
 
-class DiceBot(TwitchBot):
+class DiceBot(TwitchBot, IRCClient):
     def __init__(self,
-                 config: DiceBotConfig,
-                 protocol: CustomBotProtocol):
-        super().__init__(config, protocol)
+                 config=DiceBotConfig(),
+                 factory=None):
+        super().__init__(config=config)
+        self.command = RollCommand(self)
+        self.channels = [self.channel] # TODO: do this better
+        self.factory = factory
+
+    def signedOn(self):
+        self.factory.wait_time = 1
+
+        self.activity = self.factory.activity
+        self.tags = self.factory.tags
+
+        for channel in self.channels:
+            self.join(channel)
+        
+    def privmsg(self, user, channel, message):
+        username = user.split('!')[0].lower()
+        self.command.run(username, channel, message)

@@ -14,9 +14,8 @@ TWITCH_PORT = 6667
 class BotFactory(protocol.ClientFactory):
     MAX_WAIT_TIME = 512
 
-    def __init__(self, bot_class):
-        self.protocol = bot.CustomBotProtocol
-        self.bot_class = bot_class
+    def __init__(self):
+        self.protocol = bot.DiceBot
         self.connection = None
 
         self.tags = defaultdict(dict)
@@ -25,21 +24,19 @@ class BotFactory(protocol.ClientFactory):
 
     def clientConnectionLost(self, connector, reason):
         # TODO: log reason
-        print('REASON:\n', reason)
-        self.protocol = reload(bot).CustomBotProtocol
+        self.protocol = reload(bot).DiceBot
         connector.connect()
     
     def clientConnectionFailed(self, connector, reason):
         # TODO: log reason
-        print(44)
         time.sleep(self.wait_time)
         self.wait_time = min(self.MAX_WAIT_TIME, self.wait_time * 2)
         connector.connect()
     
     def buildProtocol(self, addr):
-        self.connection = self.protocol(self.bot_class, factory=self)
+        self.connection = self.protocol(factory=self)
         return self.connection
 
 if __name__ == "__main__":
-    reactor.connectTCP(TWITCH_HOST, TWITCH_PORT, BotFactory(DiceBot))
+    reactor.connectTCP(TWITCH_HOST, TWITCH_PORT, BotFactory())
     reactor.run()
