@@ -11,33 +11,24 @@ class Permission(Enum):
     MOD = auto()
     ADMIN = auto()
 
-class Command(object):
-    def __init__(self,
-                 bot: IRCClient,
-                 permission=Permission.USER):
-        self._bot = bot
-        self.permission = permission
-    
-    def run(self, message):
+class Rule(object):
+    def run(self, user, message):
         """
-        Run the command based on the message.
-
-        Subclasses should override this function.
+        Runs something based on the message and user.
         """
-
-        pass
+        raise NotImplementedError
     
-
-class ExecutedCommand(Command):
+class Command(Rule):
     def __init__(self,
-                 bot: IRCClient,
+                 bot,
                  name,
                  response=None,
-                 permission=Permission.USER):
-        super().__init__(bot, permission=permission)
+                 permission=Permission.USER)
+        self._bot = bot
         self.name = name
         self.response = response
-    
+        self.permission = permission
+
     def _parse_message(self, message):
         """
         Parse a message into what would be read as the execution token and its
@@ -58,25 +49,25 @@ class ExecutedCommand(Command):
 
         return self._parse_message(message)[0] is self.name
     
-    def run(self, user, channel, message):
+    def run(self, user, message):
         """
-        Processes the message first, then makes the bot say this command's
-        response in chat if the message matches the command.
+        Processes `message`, builds a response using `self.response`, and
+        outputs it using the bot.
         """
 
         if self._match(message) and self.response:
-            self._bot.say(channel, self.response)
+            self._bot.write(self.response)
 
-class TimedCommand(Command):
+class TimedRule(Rule):
     def __init__(self,
+                 bot,
                  min_messages=5,
                  interval=300,
-                 permission=Permission.USER,
-                 message='COGGERS'):
-        super().__init__(permission)
+                 pattern=None):
+        self._bot = bot
         self.min_messages = min_messages
         self.interval = interval
-        self.message = message
+        self.pattern = pattern
 
         self.__num_messages = 0
         self.base_time = datetime.now()
@@ -91,14 +82,14 @@ class TimedCommand(Command):
         time_check = datetime.now() - self.base_time > timedelta(seconds=self.interval)
         return message_check and time_check
     
-    def run(self, user, channel, message):
+    def run(self, user, message):
         """
         Makes the bot write this command's message if the command is ready
         """
 
         self.__num_messages += 1
         if self._ready:
-            self._bot.say(channel, self.message)
+            self._bot.write(self.message)
             self.__num_messages = 0
 
 class RollCommand(ExecutedCommand):
