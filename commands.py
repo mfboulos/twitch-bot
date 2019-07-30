@@ -11,23 +11,29 @@ class Permission(Enum):
     MOD = auto()
     ADMIN = auto()
 
+class Identifier(Enum):
+    USER = 'user'
+    ARG = 'arg'
+
 class Rule(object):
     def run(self, user, message):
         """
         Runs something based on the message and user.
         """
         raise NotImplementedError
-    
+
 class Command(Rule):
     def __init__(self,
                  bot,
                  name,
                  response=None,
-                 permission=Permission.USER)
+                 permission=Permission.USER):
         self._bot = bot
         self.name = name
         self.response = response
         self.permission = permission
+
+        self.__sep = '|'
 
     def _parse_message(self, message):
         """
@@ -38,8 +44,7 @@ class Command(Rule):
         respective arguments.
         """
 
-        tokens = message.split()
-        return (tokens[0], tokens[1:])
+        return tuple(message.split())
     
     def _match(self, message):
         """
@@ -48,7 +53,55 @@ class Command(Rule):
         """
 
         return self._parse_message(message)[0] is self.name
-    
+
+    def build_response(self, user, message):
+        """
+        Builds the response to a message with reference to several format
+        specifiers.
+        """
+        
+        message_tokens = message.split()
+        response = self.response
+        bracket_stack = []
+        pairs = []
+
+        idx = 0
+        while idx < len(response):
+            c = response[idx]
+            if c is '{':
+                bracket_stack.append(idx)
+            elif c is '}':
+                try:
+                    start = bracket_stack.pop()
+                    placeholder = response[start:idx + 1]
+                    replacement = self.__process_placeholder(placeholder,
+                                                             user,
+                                                             message_tokens)
+                    response = response.replace(placeholder, replacement)
+                    idx = start + len(replacement) - 1
+                except IndexError:
+                    print('No open bracket for the closed bracket at index {}!'.format(idx))
+            idx += 1
+        
+        if bracket_stack:
+            print('No closed bracket for open bracket(s) at: {}'.format(bracket_stack))
+        
+        return response
+        
+    def __process_placeholder(self, placeholder, user, tokens):
+        contents = placeholder[1:-1] if re.match('^\{.+\}$', placeholder) else placeholder
+        parts = contents.split(self.__sep)
+
+        try:
+            identifier = Identifier(parts[0])
+
+            if identifier is Identifier.USER:
+                return user
+            elif identifier is Identifier.ARG:
+                return tokens[int(parts[1].split()[0])]
+        except Exception:
+            return placeholder
+
     def run(self, user, message):
         """
         Processes `message`, builds a response using `self.response`, and
@@ -92,34 +145,34 @@ class TimedRule(Rule):
             self._bot.write(self.message)
             self.__num_messages = 0
 
-class RollCommand(ExecutedCommand):
-    def __init__(self, bot: IRCClient):
-        super().__init__(bot, '!roll')
+# class RollCommand(ExecutedCommand):
+#     def __init__(self, bot: IRCClient):
+#         super().__init__(bot, '!roll')
     
-    def _parse_message(self, message):
-        exec_token, args = super()._parse_message(message)
-        match = re.search('(\d+)d(\d+)', args[0]) if args else None
-        if match:
-            return exec_token, int(match.group(1)), int(match.group(2))
-        else:
-            return exec_token, None, None
+#     def _parse_message(self, message):
+#         exec_token, args = super()._parse_message(message)
+#         match = re.search('(\d+)d(\d+)', args[0]) if args else None
+#         if match:
+#             return exec_token, int(match.group(1)), int(match.group(2))
+#         else:
+#             return exec_token, None, None
 
-    def _match(self, message):
-        return all(self._parse_message(message))
+#     def _match(self, message):
+#         return all(self._parse_message(message))
     
-    def run(self, user, channel, message):
-        if self._match(message):
-            exec_token, amount, dice_faces = self._parse_message(message)
-            amount = max(1, min(100, amount))
-            dice_faces = max(1, min(100, dice_faces))
+#     def run(self, user, channel, message):
+#         if self._match(message):
+#             exec_token, amount, dice_faces = self._parse_message(message)
+#             amount = max(1, min(100, amount))
+#             dice_faces = max(1, min(100, dice_faces))
 
-            total = 0
-            for _ in range(amount):
-                total += random.randint(1, dice_faces)
+#             total = 0
+#             for _ in range(amount):
+#                 total += random.randint(1, dice_faces)
             
-            response = '/me @%s rolling %dd%d: %d' % (user, amount, dice_faces, total)
-            if total is amount:
-                response += ' LUL'
-            elif total is amount * dice_faces:
-                response += ' PogChamp'
-            self._bot.say(channel, response)
+#             response = '/me @%s rolling %dd%d: %d' % (user, amount, dice_faces, total)
+#             if total is amount:
+#                 response += ' LUL'
+#             elif total is amount * dice_faces:
+#                 response += ' PogChamp'
+#             self._bot.say(channel, response)
