@@ -37,7 +37,7 @@ class Command(Rule):
 
         self._write = write_func or bot.write
         self.__sep = '|'
-
+    
     def _parse_message(self, message):
         """
         Parse a message into what would be read as the execution token and its
@@ -63,7 +63,6 @@ class Command(Rule):
         specifiers.
         """
         
-        message_tokens = message.split()
         response = self.response
         bracket_stack = []
         pairs = []
@@ -79,7 +78,7 @@ class Command(Rule):
                     placeholder = response[start:idx + 1]
                     replacement = self.__process_placeholder(placeholder,
                                                              user,
-                                                             message_tokens)
+                                                             message)
                     response = response.replace(placeholder, replacement)
                     idx = start + len(replacement) - 1
                 except IndexError:
@@ -91,7 +90,8 @@ class Command(Rule):
         
         return response
         
-    def __process_placeholder(self, placeholder, user, tokens):
+    def __process_placeholder(self, placeholder, user, message):
+        tokens = message.split()
         contents = placeholder[1:-1] if re.match('^\{.+\}$', placeholder) else placeholder
         parts = contents.split(self.__sep)
 
@@ -122,11 +122,11 @@ class TimedRule(Rule):
                  min_messages=5,
                  interval=300,
                  write_func=None,
-                 pattern=None):
+                 response=None):
         self._bot = bot
         self.min_messages = min_messages
         self.interval = interval
-        self.pattern = pattern
+        self.response = response
 
         self.__num_messages = 0
         self._write = write_func or bot.write
@@ -149,7 +149,7 @@ class TimedRule(Rule):
 
         self.__num_messages += 1
         if self._ready:
-            self._write(self.message)
+            self._write(self.response)
             self.__num_messages = 0
 
 # class RollCommand(ExecutedCommand):

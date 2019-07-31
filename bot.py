@@ -82,9 +82,14 @@ class CustomTwitchBot(TwitchBot):
         super().__init__(config=config)
         self.protocol = protocol
         self.commands = commands
-
+    
+    @property
+    def _max_lines(self):
+        return 5
+    
     def write(self, message):
-        self.protocol.say(self.channel, message)
+        for line in message.split('\n')[:5]
+            self.protocol.say(self.channel, line)
 
 class DiceBot(TwitchBot, IRCClient):
     def __init__(self,
