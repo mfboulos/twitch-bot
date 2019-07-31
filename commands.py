@@ -14,6 +14,7 @@ class Permission(Enum):
 class Identifier(Enum):
     USER = 'user'
     ARG = 'arg'
+    RANDOM = 'random'
 
 class Rule(object):
     def run(self, user, message):
@@ -27,12 +28,14 @@ class Command(Rule):
                  bot,
                  name,
                  response=None,
+                 write_func=None,
                  permission=Permission.USER):
         self._bot = bot
         self.name = name
         self.response = response
         self.permission = permission
 
+        self._write = write_func or bot.write
         self.__sep = '|'
 
     def _parse_message(self, message):
@@ -54,7 +57,7 @@ class Command(Rule):
 
         return self._parse_message(message)[0] is self.name
 
-    def build_response(self, user, message):
+    def __build_response(self, user, message):
         """
         Builds the response to a message with reference to several format
         specifiers.
@@ -99,6 +102,8 @@ class Command(Rule):
                 return user
             elif identifier is Identifier.ARG:
                 return tokens[int(parts[1].split()[0])]
+            elif identifier is Identifier.RANDOM:
+                return random.choice(parts[1].split())
         except Exception:
             return placeholder
 
@@ -109,13 +114,14 @@ class Command(Rule):
         """
 
         if self._match(message) and self.response:
-            self._bot.write(self.response)
+            self._write(self.__build_response(response))
 
 class TimedRule(Rule):
     def __init__(self,
                  bot,
                  min_messages=5,
                  interval=300,
+                 write_func=None,
                  pattern=None):
         self._bot = bot
         self.min_messages = min_messages
@@ -123,6 +129,7 @@ class TimedRule(Rule):
         self.pattern = pattern
 
         self.__num_messages = 0
+        self._write = write_func or bot.write
         self.base_time = datetime.now()
     
     @property
@@ -142,7 +149,7 @@ class TimedRule(Rule):
 
         self.__num_messages += 1
         if self._ready:
-            self._bot.write(self.message)
+            self._write(self.message)
             self.__num_messages = 0
 
 # class RollCommand(ExecutedCommand):
