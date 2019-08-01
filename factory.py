@@ -8,9 +8,6 @@ import typing
 import time
 import bot
 
-TWITCH_HOST = 'irc.chat.twitch.tv'
-TWITCH_PORT = 6667
-
 class BotFactory(protocol.ClientFactory):
     MAX_WAIT_TIME = 512
 
@@ -36,7 +33,3 @@ class BotFactory(protocol.ClientFactory):
     def buildProtocol(self, addr):
         self.connection = self.protocol(factory=self)
         return self.connection
-
-if __name__ == "__main__":
-    reactor.connectTCP(TWITCH_HOST, TWITCH_PORT, BotFactory())
-    reactor.run()
