@@ -1,4 +1,5 @@
 from neomodel import StructuredNode, StringProperty, ArrayProperty, RelationshipTo, RelationshipFrom
+from neomodel.exceptions import UniqueProperty, DoesNotExist
 from neomodel.cardinality import One
 
 from twisted.words.protocols.irc import IRCClient
@@ -47,12 +48,61 @@ class BotProtocol(IRCClient, StructuredNode):
     def left(self, channel):
         self.say(channel, 'Bye!')
     
+    def add_bot(self, channel):
+        """
+        Creates a bot with channel and saves it to Neo4j connected to this
+        protocol.
+
+        :param channel:
+        :return: `True` if a bot was made successfully, `False` otherwise
+        """
+        try:
+            bot = TwitchBot(channel_no_prefix(channel)).save()
+            self.bots.connect()
+            return True
+        except UniqueProperty:
+            # TODO: log bot already exists
+            return False
+    
+    def remove_bot(self, channel):
+        """
+        Removes a bot with the given channel from Neo4j along with its
+        relationships to this protocol.
+
+        :param channel:
+        :type channel: str
+        :return: `True` if a bot was deleted successfully, `False` otherwise
+        """
+        try:
+            self.bots.get(channel=channel_no_prefix(channel)).delete()
+            return True
+        except DoesNotExist:
+            # TODO: log bot does not exist
+            return False
+
+
     @classmethod
     def channel_no_prefix(self, channel):
+        """
+        Removes prefix from channel name, if it has one.
+        
+        :param channel:
+        :type channel: str
+        :return: channel name without prefix
+        :rtype: str
+        """
         return channel[1:] if channel[0] in '&#!+' else channel
 
     @classmethod
     def channel_with_prefix(self, channel):
+        """
+        Adds `#` prefix to channel name.
+        
+        :param channel: 
+        :type channel: str
+        :return: channel name with `#` prefix
+        :rtype: str
+        """
         return '#' + channel_no_prefix(channel)
 
 class TwitchBot(StructuredNode):
