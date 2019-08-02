@@ -1,114 +1,85 @@
-from bot_config import TwitchBotConfig, DiceBotConfig
+from neomodel import StructuredNode, StringProperty, ArrayProperty, RelationshipTo, RelationshipFrom
+from neomodel.cardinality import One
+
 from twisted.words.protocols.irc import IRCClient
 from twisted.internet import reactor
-from commands import Command, RollCommand
+
+from relationships import CommandUseRel
+from commands import Command
+
+from json import JSONEncoder, JSONDecoder
 from typing import List
 
 import requests
+import pickle
 import typing
 import socket
 import atexit
 import json
 import os
 
-USERLIST_API = 'http://tmi.twitch.tv/group/user/%s/chatters'
+USERLIST_API = 'http://tmi.twitch.tv/group/user/{}/chatters'
 
-class BotAlreadyJoinedException(Exception):
-    """
-    Thrown when there is already a bot in a particular room.
-    """
-    pass
-
-# This class is gonna need a lot of work in the long run
-class CustomBotProtocol(IRCClient, object):
-    nickname = os.environ['TWITCH_USER']
-    password = os.environ['TWITCH_OAUTH']
+class BotProtocol(IRCClient, StructuredNode):
+    nickname = StringProperty(unique_index=True, required=True)
+    bots = RelationshipTo('TwitchBot', 'PROVIDES_IRC_FOR')
 
     def __init__(self,
-                 bot_class,
+                 nickname,
                  factory=None):
+        self.nickname = nickname
         self.factory = factory
-        self.bots = dict() # channel to bot key value pair
+
+        self.password = os.environ['TWITCH_OAUTH']
 
     def signedOn(self):
         self.factory.wait_time = 1
 
-        self.activity = self.factory.activity
-        self.tags = self.factory.tags
-
-        bots = [DiceBot(DiceBotConfig(), self)] # TODO: set up a db and query for all custom bots using bot_class
-
         for bot in bots:
-            self.join(bot)
-    
-    def join(self, bot):
-        if bot.channel in self.bots:
-            raise BotAlreadyJoinedException
-        
-        super().join(bot.channel)
+            self.join(bot.channel)
 
     def joined(self, channel):
         self.say(channel, 'Hello @%s!' % channel)
-        bots[bot.channel] = bot
 
     def privmsg(self, user, channel, message):
         self.say(channel, 'Nice!')
-        self.leave(channel)
     
     def left(self, channel):
         self.say(channel, 'Bye!')
-        bots.pop(channel)
+    
+    @classmethod
+    def channel_no_prefix(self, channel):
+        return channel[1:] if channel[0] in '&#!+' else channel
 
-class TwitchBot(object):
+    @classmethod
+    def channel_with_prefix(self, channel):
+        return '#' + channel_no_prefix(channel)
+
+class TwitchBot(StructuredNode):
+    channel = StringProperty(unique_index=True, required=True)
+    ignore = ArrayProperty(base_property=StringProperty())
+    usable_commands = RelationshipTo('Command', 'CAN_USE', model=CommandUseRel)
+    owned_commands = RelationshipTo('Command', 'OWNS')
+    protocol = RelationshipFrom('BotProtocol', 'PROVIDES_IRC_FOR', cardinality=One)
+
     def __init__(self,
-                 config: TwitchBotConfig=TwitchBotConfig()):
-        self.channel = config.channel
-        self.password = config.password
-        self.nickname = config.nickname
-        self.ignore_patterns = config.ignore_patterns
+                 channel,
+                 ignore=['nightbot', 'moobot', 'streamelements', '.+bot']):
+        kwargs['channel'] = BotProtocol.channel_no_prefix(channel)
+        kwargs['ignore'] = ignore
 
-        user_data = requests.get(USERLIST_API % self.channel[1:]).json()
+        user_data = requests.get(USERLIST_API.format(self.channel)).json()
         chatters = user_data['chatters']
         self.users = set(sum(chatters.values(), []))
         self.mods = set(chatters['moderators'])
         self.subs = set()
 
-
-class CustomTwitchBot(TwitchBot):
-    def __init__(self,
-                 config,
-                 protocol: CustomBotProtocol,
-                 commands: List[Command]=[]):
-        super().__init__(config=config)
-        self.protocol = protocol
-        self.commands = commands
+        super().__init__(*args, **kwargs)
     
     @property
     def _max_lines(self):
         return 5
     
     def write(self, message):
-        for line in message.split('\n')[:5]
-            self.protocol.say(self.channel, line)
-
-class DiceBot(TwitchBot, IRCClient):
-    def __init__(self,
-                 config=DiceBotConfig(),
-                 factory=None):
-        super().__init__(config=config)
-        self.command = RollCommand(self)
-        self.channels = [self.channel] # TODO: do this better
-        self.factory = factory
-
-    def signedOn(self):
-        self.factory.wait_time = 1
-
-        self.activity = self.factory.activity
-        self.tags = self.factory.tags
-
-        for channel in self.channels:
-            self.join(channel)
-        
-    def privmsg(self, user, channel, message):
-        username = user.split('!')[0].lower()
-        self.command.run(username, channel, message)
+        for line in message.split('\n')[:5]:
+            self.protocol.single().say(self.channel, line)
