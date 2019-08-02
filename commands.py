@@ -1,15 +1,15 @@
 from twisted.words.protocols.irc import IRCClient
+
+from neomodel import StructuredNode, StringProperty, IntegerProperty, DateTimeProperty, RelationshipFrom, RelationshipTo
+from neomodel.cardinality import One, OneOrMore
+
 from datetime import datetime, timedelta
 from enum import Enum, auto
 
+from relationships import CommandUseRel
+
 import random
 import re
-
-class Permission(Enum):
-    USER = auto()
-    SUB = auto()
-    MOD = auto()
-    ADMIN = auto()
 
 class Identifier(Enum):
     USER = 'user'
@@ -19,24 +19,28 @@ class Identifier(Enum):
 class Rule(object):
     def run(self, user, message):
         """
-        Runs something based on the message and user.
+        Runs something based on a message and user.
+        
+        :param user: 
+        :type user: str
+        :param message:
+        :type message: str
+        :raises NotImplementedError:
         """
         raise NotImplementedError
 
-class Command(Rule):
-    def __init__(self,
-                 bot,
-                 name,
-                 response=None,
-                 write_func=None,
-                 permission=Permission.USER):
-        self._bot = bot
-        self.name = name
-        self.response = response
-        self.permission = permission
+class Command(Rule, StructuredNode):
+    response = StringProperty()
+    bots = RelationshipFrom('bot.TwitchBot', 'CAN_USE', cardinality=OneOrMore,
+                           model=CommandUseRel)
+    owner = RelationshipFrom('bot.TwitchBot', 'OWNS', cardinality=One)
 
-        self._write = write_func or bot.write
+    def __init__(self, response=None, *args, **kwargs):
+        kwargs['response'] = response
+        
         self.__sep = '|'
+
+        super().__init__(*args, **kwargs)
     
     def _parse_message(self, message):
         """
@@ -49,13 +53,14 @@ class Command(Rule):
 
         return tuple(message.split())
     
+    # TODO: move to bot
     def _match(self, message):
         """
         Returns `True` if the message's execution token matches the name of the
         command, `False` otherwise.
         """
-
-        return self._parse_message(message)[0] is self.name
+        pass
+        # return self._parse_message(message)[0] is self.name
 
     def __build_response(self, user, message):
         """
@@ -107,6 +112,7 @@ class Command(Rule):
         except Exception:
             return placeholder
 
+    # TODO: rewrite to take either bot or write function
     def run(self, user, message):
         """
         Processes `message`, builds a response using `self.response`, and
@@ -116,41 +122,44 @@ class Command(Rule):
         if self._match(message) and self.response:
             self._write(self.__build_response(response))
 
-class TimedRule(Rule):
-    def __init__(self,
-                 bot,
-                 min_messages=5,
-                 interval=300,
-                 write_func=None,
-                 response=None):
-        self._bot = bot
-        self.min_messages = min_messages
-        self.interval = interval
-        self.response = response
+class TimedRule(Rule, StructuredNode):
+    response = StringProperty()
+    min_messages = IntegerProperty(default=5)
+    num_messages = IntegerProperty(default=0)
+    cooldown = IntegerProperty(default=300)
+    last_called = DateTimeProperty(default_now=datetime.now)
+    bots = RelationshipFrom('bot.TwitchBot', 'CAN_USE', cardinality=OneOrMore,
+                           model=CommandUseRel)
+    owner = RelationshipFrom('bot.TwitchBot', 'OWNS', cardinality=One)
 
-        self.__num_messages = 0
-        self._write = write_func or bot.write
-        self.base_time = datetime.now()
+    def __init__(self, response=None, *args, **kwargs):
+        kwargs['response'] = response
+        super().__init__(*args, **kwargs)
     
     @property
     def _ready(self):
         """
-        Returns `True` if this command is ready to execute again, `False` otherwise
+        Determines whether this rule is ready to be executed again.
+        
+        :return:
+        :rtype: bool
         """
 
-        message_check = self.__num_messages >= self.min_messages
-        time_check = datetime.now() - self.base_time > timedelta(seconds=self.interval)
+        message_check = self.num_messages >= self.min_messages
+        time_check = datetime.now() - self.last_called > timedelta(seconds=self.intecooldownrval)
         return message_check and time_check
     
+    # TODO: rewrite to take either bot or write function
     def run(self, user, message):
         """
         Makes the bot write this command's message if the command is ready
         """
 
-        self.__num_messages += 1
+        self.num_messages += 1
         if self._ready:
-            self._write(self.response)
-            self.__num_messages = 0
+            self.num_messages = 0
+
+# I'm just gonna keep this around til I make a roll command with the current framework
 
 # class RollCommand(ExecutedCommand):
 #     def __init__(self, bot: IRCClient):
