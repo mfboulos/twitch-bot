@@ -30,8 +30,8 @@ class BotProtocol(IRCClient, StructuredNode):
     def __init__(self,
                  nickname,
                  factory=None):
-        self.nickname = nickname
         self.factory = factory
+        kwargs['nickname'] = nickname
 
         self.password = os.environ['TWITCH_OAUTH']
 
