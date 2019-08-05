@@ -60,13 +60,13 @@ class BotProtocol(IRCClient, StructuredNode):
         :return: `True` if a bot was made successfully, `False` otherwise
         :rtype: bool
         """
-        bot = bots.match(channel=channel_no_prefix(channel)).first_or_none()
+        bots = self.bots.match(channel=channel_no_prefix(channel))
         if bots:
             # TODO: log bot already exists
             return False
         
         bot = TwitchBot().save()
-        self.bots.connect(bot, {'channel': channel_no_prefix(channel)})
+        bot.protocol.connect(self, {'channel': channel_no_prefix(channel)})
         return True
     
     def remove_bot(self, channel):
@@ -80,9 +80,9 @@ class BotProtocol(IRCClient, StructuredNode):
         :rtype: bool
         """
         try:
-            self.bots.match(channel=channel_no_prefix(channel)).first().delete()
+            self.bots.match(channel=channel_no_prefix(channel))[0].delete()
             return True
-        except DoesNotExist:
+        except IndexError:
             # TODO: log bot does not exist
             return False
 
@@ -131,7 +131,7 @@ class TwitchBot(StructuredNode):
     
     @property
     def channel(self):
-        return protocol.relationship(self).channel
+        return self.protocol.relationship(self.protocol.single()).channel
 
     @property
     def _max_lines(self):
