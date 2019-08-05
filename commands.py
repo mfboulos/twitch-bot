@@ -11,117 +11,18 @@ from relationships import CommandUseRel
 import random
 import re
 
-class Identifier(Enum):
-    USER = 'user'
-    ARG = 'arg'
-    RANDOM = 'random'
-
-class Rule(object):
-    def run(self, user, message):
-        """
-        Runs something based on a message and user.
-        
-        :param user: 
-        :type user: str
-        :param message:
-        :type message: str
-        :raises NotImplementedError:
-        """
-        raise NotImplementedError
-
-class Command(Rule, StructuredNode):
-    response = StringProperty()
+class Command(StructuredNode):
+    response = StringProperty(required=True)
     bots = RelationshipFrom('bot.TwitchBot', 'CAN_USE', cardinality=OneOrMore,
                            model=CommandUseRel)
     owner = RelationshipFrom('bot.TwitchBot', 'OWNS', cardinality=One)
 
-    def __init__(self, response=None, *args, **kwargs):
+    def __init__(self, response, *args, **kwargs):
         kwargs['response'] = response
-        
-        self.__sep = '|'
 
         super().__init__(*args, **kwargs)
-    
-    def _parse_message(self, message):
-        """
-        Parse a message into what would be read as the execution token and its
-        arguments separately.
 
-        Returns a tuple pair of the potential execution token and its list of
-        respective arguments.
-        """
-
-        return tuple(message.split())
-    
-    # TODO: move to bot
-    def _match(self, message):
-        """
-        Returns `True` if the message's execution token matches the name of the
-        command, `False` otherwise.
-        """
-        pass
-        # return self._parse_message(message)[0] is self.name
-
-    def __build_response(self, user, message):
-        """
-        Builds the response to a message with reference to several format
-        specifiers.
-        """
-        
-        response = self.response
-        bracket_stack = []
-        pairs = []
-
-        idx = 0
-        while idx < len(response):
-            c = response[idx]
-            if c is '{':
-                bracket_stack.append(idx)
-            elif c is '}':
-                try:
-                    start = bracket_stack.pop()
-                    placeholder = response[start:idx + 1]
-                    replacement = self.__process_placeholder(placeholder,
-                                                             user,
-                                                             message)
-                    response = response.replace(placeholder, replacement)
-                    idx = start + len(replacement) - 1
-                except IndexError:
-                    print('No open bracket for the closed bracket at index {}!'.format(idx))
-            idx += 1
-        
-        if bracket_stack:
-            print('No closed bracket for open bracket(s) at: {}'.format(bracket_stack))
-        
-        return response
-        
-    def __process_placeholder(self, placeholder, user, message):
-        tokens = message.split()
-        contents = placeholder[1:-1] if re.match('^\{.+\}$', placeholder) else placeholder
-        parts = contents.split(self.__sep)
-
-        try:
-            identifier = Identifier(parts[0])
-
-            if identifier is Identifier.USER:
-                return user
-            elif identifier is Identifier.ARG:
-                return tokens[int(parts[1].split()[0])]
-            elif identifier is Identifier.RANDOM:
-                return random.choice(parts[1].split())
-        except Exception:
-            return placeholder
-
-    # TODO: rewrite to take either bot or write function
-    def run(self, user, message):
-        """
-        Processes `message`, builds a response using `self.response`, and
-        outputs it using the bot.
-        """
-
-        if self._match(message) and self.response:
-            self._write(self.__build_response(response))
-
+# We'll probably integrate this into CommandUseRel
 class TimedRule(Rule, StructuredNode):
     response = StringProperty()
     min_messages = IntegerProperty(default=5)
