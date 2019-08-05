@@ -52,26 +52,27 @@ class BotProtocol(IRCClient, StructuredNode):
     
     def add_bot(self, channel):
         """
-        Creates a bot with channel and saves it to Neo4j connected to this
-        protocol.
+        Creates a bot connected to channel and saves it to Neo4j with a
+        relationship to this protocol.
 
         :param channel:
         :type channel: str
         :return: `True` if a bot was made successfully, `False` otherwise
         :rtype: bool
         """
-        try:
-            bot = TwitchBot(channel_no_prefix(channel)).save()
-            self.bots.connect()
-            return True
-        except UniqueProperty:
+        bot = bots.match(channel=channel_no_prefix(channel)).first_or_none()
+        if bots:
             # TODO: log bot already exists
             return False
+        
+        bot = TwitchBot().save()
+        self.bots.connect(bot, {'channel': channel_no_prefix(channel)})
+        return True
     
     def remove_bot(self, channel):
         """
-        Removes a bot with the given channel from Neo4j along with its
-        relationships to this protocol.
+        Removes a bot related by the given channel from Neo4j entirely, along
+        with all its relationships to any other nodes.
 
         :param channel:
         :type channel: str
@@ -79,12 +80,11 @@ class BotProtocol(IRCClient, StructuredNode):
         :rtype: bool
         """
         try:
-            self.bots.get(channel=channel_no_prefix(channel)).delete()
+            self.bots.match(channel=channel_no_prefix(channel)).first().delete()
             return True
         except DoesNotExist:
             # TODO: log bot does not exist
             return False
-
 
     @classmethod
     def channel_no_prefix(self, channel):
@@ -111,26 +111,28 @@ class BotProtocol(IRCClient, StructuredNode):
         return '#' + channel_no_prefix(channel)
 
 class TwitchBot(StructuredNode):
-    channel = StringProperty(unique_index=True, required=True)
     ignore = ArrayProperty(base_property=StringProperty())
     usable_commands = RelationshipTo('Command', 'CAN_USE', model=CommandUseRel)
     owned_commands = RelationshipTo('Command', 'OWNS')
     protocol = RelationshipFrom('BotProtocol', 'PROVIDES_IRC_FOR', cardinality=One)
 
     def __init__(self,
-                 channel,
                  ignore=['nightbot', 'moobot', 'streamelements', '.+bot']):
-        kwargs['channel'] = BotProtocol.channel_no_prefix(channel)
         kwargs['ignore'] = ignore
 
         user_data = requests.get(USERLIST_API.format(self.channel)).json()
         chatters = user_data['chatters']
+
         self.users = set(sum(chatters.values(), []))
         self.mods = set(chatters['moderators'])
         self.subs = set()
 
         super().__init__(*args, **kwargs)
     
+    @property
+    def channel(self):
+        return protocol.relationship(self).channel
+
     @property
     def _max_lines(self):
         """
@@ -141,7 +143,7 @@ class TwitchBot(StructuredNode):
         :rtype: int
         """
         return 5
-    
+
     def write(self, message):
         """
         Writes `message` line by line up to `_max_lines`

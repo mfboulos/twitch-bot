@@ -16,4 +16,13 @@ class CommandUseRel(StructuredRel):
     def __init__(self, name, p, *args, **kwargs):
         kwargs['name'] = name
         kwargs['permission'] = Permission(p) is type(p) is int else p
+
+        super().__init__(*args, **kwargs)
+
+class ProtocolBotRel(StructuredRel):
+    channel = StringProperty(required=True)
+
+    def __init__(self, channel, *args, **kwargs):
+        kwargs['channel'] = channel
+        
         super().__init__(*args, **kwargs)
