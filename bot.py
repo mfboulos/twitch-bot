@@ -8,7 +8,7 @@ from twisted.words.protocols.irc import IRCClient
 
 import requests
 
-from relationships import CommandUseRel
+from relationships import CommandUseRel, BotAccumRel
 # from commands import Command
 
 # from json import JSONEncoder, JSONDecoder
@@ -110,6 +110,7 @@ class TwitchBot(StructuredNode):
     usable_commands = RelationshipTo('Command', 'CAN_USE', model=CommandUseRel)
     owned_commands = RelationshipTo('Command', 'OWNS')
     irc_protocol = RelationshipFrom('BotProtocol', 'PROVIDES_IRC_FOR', cardinality=One)
+    accumulators = RelationshipTo('accumulator.Accumulator', 'ACCUMULATES', model=BotAccumRel)
 
     def __init__(self, ignore=[], *args, **kwargs):
         kwargs['ignore'] = ['.+bot', 'streamelements'] + ignore
@@ -150,10 +151,7 @@ class TwitchBot(StructuredNode):
         :type message: str
         """
         for line in message.split('\n')[:5]:
-            self.protocol.single().say(self.channel, line)
-    
-    def connect(self):
-        self.protocol
+            self.protocol.say(self.channel, line)
     
     # The bot is responsible for building responses stored within a command
 

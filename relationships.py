@@ -15,7 +15,7 @@ class CommandUseRel(StructuredRel):
 
     def __init__(self, name, p, *args, **kwargs):
         kwargs['name'] = name
-        kwargs['permission'] = Permission(p) if type(p) is int else p
+        kwargs['permission'] = Permission(p) if isinstance(p, int) else p
 
         super().__init__(*args, **kwargs)
 
@@ -24,5 +24,13 @@ class ProtocolBotRel(StructuredRel):
 
     def __init__(self, channel, *args, **kwargs):
         kwargs['channel'] = channel
+        
+        super().__init__(*args, **kwargs)
+
+class BotAccumRel(StructuredRel):
+    total = IntegerProperty(required=True)
+
+    def __init__(self, *args, **kwargs):
+        kwargs['total'] = 0
         
         super().__init__(*args, **kwargs)
