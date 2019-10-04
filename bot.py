@@ -1,25 +1,18 @@
+import os
+
 from neomodel import StructuredNode, StringProperty, ArrayProperty, RelationshipTo, RelationshipFrom
-from neomodel.exceptions import UniqueProperty, DoesNotExist
+# from neomodel.exceptions import DoesNotExist
 from neomodel.cardinality import One
 
 from twisted.words.protocols.irc import IRCClient
-from twisted.internet import reactor
-
-from placeholder_ops import UserOp, ArgsOp, RandomOp
-from relationships import CommandUseRel
-from commands import Command
-
-from json import JSONEncoder, JSONDecoder
-from typing import List
 
 import requests
-import pickle
-import typing
-import socket
-import atexit
-import json
-import re
-import os
+
+from relationships import CommandUseRel
+# from commands import Command
+
+# from json import JSONEncoder, JSONDecoder
+# import pickle
 
 USERLIST_API = 'http://tmi.twitch.tv/group/user/{}/chatters'
 
@@ -27,28 +20,30 @@ class BotProtocol(IRCClient, StructuredNode):
     nickname = StringProperty(unique_index=True, required=True)
     bots = RelationshipTo('TwitchBot', 'PROVIDES_IRC_FOR')
 
-    def __init__(self,
-                 nickname,
-                 factory=None):
+    def __init__(self, nickname, factory, *args, **kwargs):
         self.factory = factory
+        self.password = os.environ['TWITCH_OAUTH']
         kwargs['nickname'] = nickname
 
-        self.password = os.environ['TWITCH_OAUTH']
+        super().__init__(*args, **kwargs)
 
     def signedOn(self):
         self.factory.wait_time = 1
 
-        for bot in bots:
+        for bot in self.bots:
             self.join(bot.channel)
 
     def joined(self, channel):
-        self.say(channel, 'Hello @%s!' % channel)
+        # if anything needs to be done upon joining
+        pass
 
     def privmsg(self, user, channel, message):
-        self.say(channel, 'Nice!')
+        # everything that happens with a message
+        pass
     
     def left(self, channel):
-        self.say(channel, 'Bye!')
+        # if anything needs to be done upon leaving
+        pass
     
     def add_bot(self, channel):
         """
@@ -60,13 +55,13 @@ class BotProtocol(IRCClient, StructuredNode):
         :return: `True` if a bot was made successfully, `False` otherwise
         :rtype: bool
         """
-        bots = self.bots.match(channel=channel_no_prefix(channel))
+        bots = self.bots.match(channel=self.channel_no_prefix(channel))
         if bots:
             # TODO: log bot already exists
             return False
         
         bot = TwitchBot().save()
-        bot.protocol.connect(self, {'channel': channel_no_prefix(channel)})
+        bot.protocol.connect(self, {'channel': self.channel_no_prefix(channel)})
         return True
     
     def remove_bot(self, channel):
@@ -80,14 +75,14 @@ class BotProtocol(IRCClient, StructuredNode):
         :rtype: bool
         """
         try:
-            self.bots.match(channel=channel_no_prefix(channel))[0].delete()
+            self.bots.match(channel=self.channel_no_prefix(channel))[0].delete()
             return True
         except IndexError:
             # TODO: log bot does not exist
             return False
 
     @classmethod
-    def channel_no_prefix(self, channel):
+    def channel_no_prefix(cls, channel):
         """
         Removes prefix from channel name, if it has one.
         
@@ -99,7 +94,7 @@ class BotProtocol(IRCClient, StructuredNode):
         return channel[1:] if channel[0] in '&#!+' else channel
 
     @classmethod
-    def channel_with_prefix(self, channel):
+    def channel_with_prefix(cls, channel):
         """
         Adds `#` prefix to channel name.
         
@@ -108,17 +103,16 @@ class BotProtocol(IRCClient, StructuredNode):
         :return: channel name with `#` prefix
         :rtype: str
         """
-        return '#' + channel_no_prefix(channel)
+        return '#' + cls.channel_no_prefix(channel)
 
 class TwitchBot(StructuredNode):
     ignore = ArrayProperty(base_property=StringProperty())
     usable_commands = RelationshipTo('Command', 'CAN_USE', model=CommandUseRel)
     owned_commands = RelationshipTo('Command', 'OWNS')
-    protocol = RelationshipFrom('BotProtocol', 'PROVIDES_IRC_FOR', cardinality=One)
+    irc_protocol = RelationshipFrom('BotProtocol', 'PROVIDES_IRC_FOR', cardinality=One)
 
-    def __init__(self,
-                 ignore=['nightbot', 'moobot', 'streamelements', '.+bot']):
-        kwargs['ignore'] = ignore
+    def __init__(self, ignore=[], *args, **kwargs):
+        kwargs['ignore'] = ['.+bot', 'streamelements'] + ignore
 
         user_data = requests.get(USERLIST_API.format(self.channel)).json()
         chatters = user_data['chatters']
@@ -129,6 +123,10 @@ class TwitchBot(StructuredNode):
 
         super().__init__(*args, **kwargs)
     
+    @property
+    def protocol(self):
+        return self.irc_protocol.single()
+
     @property
     def channel(self):
         return self.protocol.relationship(self.protocol.single()).channel
@@ -154,79 +152,84 @@ class TwitchBot(StructuredNode):
         for line in message.split('\n')[:5]:
             self.protocol.single().say(self.channel, line)
     
+    def connect(self):
+        self.protocol
+    
     # The bot is responsible for building responses stored within a command
 
-    class Placeholder(Enum):
-        user = UserOp
-        args = ArgsOp
-        random = RandomOp
+    # I'll think about it :)
 
-        def process(self, parts, user, message):
-            self.value().process(parts, user, message)
+    # class Placeholder(Enum):
+    #     user = UserOp
+    #     args = ArgsOp
+    #     random = RandomOp
 
-    @property
-    def sep(self):
-        return '|'
+    #     def process(self, parts, user, message):
+    #         self.value().process(parts, user, message)
 
-    def __build_response(self, user, message, command_response):
-        """
-        Builds the response to a command invocation.
+    # @property
+    # def sep(self):
+    #     return '|'
+
+    # def __build_response(self, user, message, command_response):
+    #     """
+    #     Builds the response to a command invocation.
         
-        :param user: username invoking the command
-        :type user: str
-        :param message: full message of the user invoking the command
-        :type message: str
-        :param command_response: response structure as defined by a `Command`
-        :type command_response: str
-        :return: fully built response
-        :rtype: str
-        """
-        response = command_response
-        bracket_stack = []
+    #     :param user: username invoking the command
+    #     :type user: str
+    #     :param message: full message of the user invoking the command
+    #     :type message: str
+    #     :param command_response: response structure as defined by a `Command`
+    #     :type command_response: str
+    #     :return: fully built response
+    #     :rtype: str
+    #     """
+    #     response = command_response
+    #     bracket_stack = []
 
-        idx = 0
-        while idx < len(response):
-            c = response[idx]
-            if c is '{':
-                bracket_stack.append(idx)
-            elif c is '}':
-                try:
-                    start = bracket_stack.pop()
-                    placeholder = response[start:idx + 1]
-                    replacement = self.__process_placeholder(placeholder,
-                                                             user,
-                                                             message)
-                    response = response.replace(placeholder, replacement)
-                    idx = start + len(replacement) - 1
-                except IndexError:
-                    print('No open bracket for the closed bracket at index {}!'.format(idx))
-            idx += 1
+    #     idx = 0
+    #     while idx < len(response):
+    #         c = response[idx]
+    #         if c is '{':
+    #             bracket_stack.append(idx)
+    #         elif c is '}':
+    #             try:
+    #                 start = bracket_stack.pop()
+    #                 placeholder = response[start:idx + 1]
+    #                 replacement = self.__process_placeholder(placeholder,
+    #                                                          user,
+    #                                                          message)
+    #                 response = response.replace(placeholder, replacement)
+    #                 idx = start + len(replacement) - 1
+    #             except IndexError:
+    #                 print('No open bracket for the closed bracket at index {}!'.format(idx))
+    #         idx += 1
         
-        if bracket_stack:
-            print('No closed bracket for open bracket(s) at: {}'.format(bracket_stack))
+    #     if bracket_stack:
+    #         print('No closed bracket for open bracket(s) at: {}'.format(bracket_stack))
         
-        return response
+    #     return response
 
-    def __process_placeholder(self, placeholder, user, message):
-        """
-        Parses a placeholder from `Command` response structure and returns
-        its replacement.
+    # def __process_placeholder(self, placeholder, user, message):
+    #     """
+    #     Parses a placeholder from `Command` response structure and returns
+    #     its replacement.
 
-        Returns `placeholder` if it runs into an `Exception` on the way.
+    #     Returns `placeholder` if it runs into an `Exception` on the way.
         
-        :param placeholder: (ex: `{user})
-        :type placeholder: str
-        :param user: username invoking the command
-        :type user: str
-        :param message: full message of the user invoking the command
-        :type message: str
-        :return: replacement for the input `placeholder`
-        :rtype: str
-        """
-        contents = placeholder[1:-1] if re.match('^\{.+\}$', placeholder) else placeholder
-        parts = re.split('\s*{}\s*'.format(self.sep), contents)
+    #     :param placeholder: (ex: `{user})
+    #     :type placeholder: str
+    #     :param user: username invoking the command
+    #     :type user: str
+    #     :param message: full message of the user invoking the command
+    #     :type message: str
+    #     :return: replacement for the input `placeholder`
+    #     :rtype: str
+    #     """
+    #     contents = placeholder[1:-1] if re.match('^\{.+\}$', placeholder) else placeholder
+    #     parts = re.split('\s*{}\s*'.format(self.sep), contents)
 
-        try:
-            TwitchBot.Placeholder[parts[0]].process(parts, user, message)
-        except Exception:
-            return placeholder
+    #     try:
+    #         TwitchBot.Placeholder[parts[0]].process(parts, user, message)
+    #     except Exception:
+    #         return placeholder

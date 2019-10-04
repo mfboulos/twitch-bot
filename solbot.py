@@ -3,9 +3,6 @@ from twisted.internet import reactor
 from db_config import Neo4JConfig
 from factory import BotFactory
 
-import commands
-import bot
-
 TWITCH_HOST = 'irc.chat.twitch.tv'
 TWITCH_PORT = 6667
 

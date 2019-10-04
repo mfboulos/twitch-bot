@@ -1,6 +1,6 @@
 from neomodel import StructuredRel, BooleanProperty, StringProperty, IntegerProperty
 
-from enum import Enum, auto
+from enum import IntEnum, auto
 
 class Permission(IntEnum):
     USER = auto()
@@ -15,7 +15,7 @@ class CommandUseRel(StructuredRel):
 
     def __init__(self, name, p, *args, **kwargs):
         kwargs['name'] = name
-        kwargs['permission'] = Permission(p) is type(p) is int else p
+        kwargs['permission'] = Permission(p) if type(p) is int else p
 
         super().__init__(*args, **kwargs)
 

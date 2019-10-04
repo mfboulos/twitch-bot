@@ -1,15 +1,16 @@
-from twisted.words.protocols.irc import IRCClient
+# from twisted.words.protocols.irc import IRCClient
 
-from neomodel import StructuredNode, StringProperty, IntegerProperty, DateTimeProperty, RelationshipFrom, RelationshipTo
+from neomodel import StructuredNode, StringProperty, RelationshipFrom
+#, IntegerProperty, DateTimeProperty, RelationshipTo
 from neomodel.cardinality import One, OneOrMore
 
-from datetime import datetime, timedelta
-from enum import Enum, auto
+# from datetime import datetime, timedelta
+# from enum import Enum, auto
 
 from relationships import CommandUseRel
 
-import random
-import re
+# import random
+# import re
 
 class Command(StructuredNode):
     response = StringProperty(required=True)
@@ -23,42 +24,42 @@ class Command(StructuredNode):
         super().__init__(*args, **kwargs)
 
 # We'll probably integrate this into CommandUseRel
-class TimedRule(Rule, StructuredNode):
-    response = StringProperty()
-    min_messages = IntegerProperty(default=5)
-    num_messages = IntegerProperty(default=0)
-    cooldown = IntegerProperty(default=300)
-    last_called = DateTimeProperty(default_now=datetime.now)
-    bots = RelationshipFrom('bot.TwitchBot', 'CAN_USE', cardinality=OneOrMore,
-                           model=CommandUseRel)
-    owner = RelationshipFrom('bot.TwitchBot', 'OWNS', cardinality=One)
+# class TimedRule(Rule, StructuredNode):
+#     response = StringProperty()
+#     min_messages = IntegerProperty(default=5)
+#     num_messages = IntegerProperty(default=0)
+#     cooldown = IntegerProperty(default=300)
+#     last_called = DateTimeProperty(default_now=datetime.now)
+#     bots = RelationshipFrom('bot.TwitchBot', 'CAN_USE', cardinality=OneOrMore,
+#                            model=CommandUseRel)
+#     owner = RelationshipFrom('bot.TwitchBot', 'OWNS', cardinality=One)
 
-    def __init__(self, response=None, *args, **kwargs):
-        kwargs['response'] = response
-        super().__init__(*args, **kwargs)
+#     def __init__(self, response=None, *args, **kwargs):
+#         kwargs['response'] = response
+#         super().__init__(*args, **kwargs)
     
-    @property
-    def _ready(self):
-        """
-        Determines whether this rule is ready to be executed again.
+#     @property
+#     def _ready(self):
+#         """
+#         Determines whether this rule is ready to be executed again.
         
-        :return:
-        :rtype: bool
-        """
+#         :return:
+#         :rtype: bool
+#         """
 
-        message_check = self.num_messages >= self.min_messages
-        time_check = datetime.now() - self.last_called > timedelta(seconds=self.intecooldownrval)
-        return message_check and time_check
+#         message_check = self.num_messages >= self.min_messages
+#         time_check = datetime.now() - self.last_called > timedelta(seconds=self.intecooldownrval)
+#         return message_check and time_check
     
-    # TODO: rewrite to take either bot or write function
-    def run(self, user, message):
-        """
-        Makes the bot write this command's message if the command is ready
-        """
+#     # TODO: rewrite to take either bot or write function
+#     def run(self, user, message):
+#         """
+#         Makes the bot write this command's message if the command is ready
+#         """
 
-        self.num_messages += 1
-        if self._ready:
-            self.num_messages = 0
+#         self.num_messages += 1
+#         if self._ready:
+#             self.num_messages = 0
 
 # I'm just gonna keep this around til I make a roll command with the current framework
 
